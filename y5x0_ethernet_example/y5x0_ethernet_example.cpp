@@ -38,10 +38,19 @@
 #define CMD_START_SAMPLING 0x102
 #define CMD_STOP_SAMPLING  0x103
 #define CMD_READ_GPS       0x101
+#define CMD_CONFIG_PPS_SEL        0x104
+#define CMD_LOL_FREQ_CONFIG       0x105
+#define CMD_RX1_GAIN_CONFIG       0x106
+#define CMD_RX2_GAIN_CONFIG       0x107
 
 #define TEST_GPS
 //#define TEST_DATA_SAMPLE
 //#define SAVING_DATA
+#define TEST_LOL_FREQ
+#define TEST_PPS_SEL
+#define TEST_RX1_GAIN
+#define TEST_RX2_GAIN
+
 #define MAX_TEST_CYCLE 1
 
 #pragma pack(2)
@@ -92,6 +101,10 @@ typedef struct yunsdr_meta {
 	uint32_t payload[0];
 }YUNSDR_META;
 
+typedef struct rf_frequency {
+	uint32_t fre_high;
+	uint32_t fre_low;
+}RF_FREQUENCY;
 
 typedef union long_t FLOATType;
 
@@ -252,9 +265,48 @@ int main(int argc, char** argv)
 
 	GPS g_info;
 	GPS_STATUS g_status;
-	CMD cmd_start = { htons(0xAA55), htons(0x01), htons(CMD_START_SAMPLING), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, 0, 0x55AA };
-	CMD cmd_stop = { htons(0xAA55), htons(0x01), htons(CMD_STOP_SAMPLING), 0, 0, 0, 0, 0, 0x55AA };
-	CMD cmd_gps = { htons(0xAA55), htons(0x01), htons(CMD_READ_GPS), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, 0, 0x55AA };
+	RF_FREQUENCY fre_config;
+	uint64_t lol_freq_value = 5000000000;
+	fre_config.fre_high = (uint32_t)(lol_freq_value >> 32);
+	fre_config.fre_low = (uint32_t)lol_freq_value;
+	uint32_t pps_sel = 1;
+	uint32_t rx1_gain_value = 12;
+	uint32_t rx2_gain_value = 16;
+	CMD cmd_start = { htons(0xAA55), htons(0x01), htons(CMD_START_SAMPLING), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, 0, htons(0x55AA) };
+	CMD cmd_stop = { htons(0xAA55), htons(0x01), htons(CMD_STOP_SAMPLING), 0, 0, 0, 0, 0, htons(0x55AA) };
+	CMD cmd_gps = { htons(0xAA55), htons(0x01), htons(CMD_READ_GPS), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, 0, htons(0x55AA) };
+	CMD cmd_freq = { htons(0xAA55), htons(0x01), htons(CMD_LOL_FREQ_CONFIG), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, htonl(fre_config.fre_high), htonl(fre_config.fre_low), htons(0x55AA) };
+	CMD cmd_pps = { htons(0xAA55), htons(0x01), htons(CMD_CONFIG_PPS_SEL), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, htonl(pps_sel), htons(0x55AA) };
+	CMD cmd_rx1gain = { htons(0xAA55), htons(0x01), htons(CMD_RX1_GAIN_CONFIG), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, htonl(rx1_gain_value), htons(0x55AA) };
+	CMD cmd_rx2gain = { htons(0xAA55), htons(0x01), htons(CMD_RX2_GAIN_CONFIG), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, htonl(rx2_gain_value), htons(0x55AA) };
+
+#ifdef TEST_LOL_FREQ
+	/** config local freq via tcp **/
+	nwrite = send(sockfd, (char*)& cmd_freq, sizeof(cmd_freq), 0);
+	assert(nwrite >= 0);
+	Sleep(1000);
+#endif
+
+#ifdef TEST_PPS_SEL
+	/** config PPS selection via tcp **/
+	nwrite = send(sockfd, (char*)& cmd_pps, sizeof(cmd_pps), 0);
+	assert(nwrite >= 0);
+	Sleep(1000);
+#endif
+
+#ifdef TEST_RX1_GAIN
+	/** config rx1 gain via tcp **/
+	nwrite = send(sockfd, (char*)& cmd_rx1gain, sizeof(cmd_rx1gain), 0);
+	assert(nwrite >= 0);
+	Sleep(1000);
+#endif
+
+#ifdef TEST_RX2_GAIN
+	/** config rx2 gain via tcp **/
+	nwrite = send(sockfd, (char*)& cmd_rx2gain, sizeof(cmd_rx2gain), 0);
+	assert(nwrite >= 0);
+	Sleep(1000);
+#endif
 #ifdef TEST_GPS
 	for (int i = 0; i < 10000; i++) {
 		/** read gps information from tcp **/
