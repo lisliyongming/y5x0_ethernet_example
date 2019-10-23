@@ -266,12 +266,22 @@ int main(int argc, char** argv)
 	GPS g_info;
 	GPS_STATUS g_status;
 	RF_FREQUENCY fre_config;
+
+	//FR local frequency config value, unit is Hz, range from 0~6000000000
 	uint64_t lol_freq_value = 5000000000;
 	fre_config.fre_high = (uint32_t)(lol_freq_value >> 32);
 	fre_config.fre_low = (uint32_t)lol_freq_value;
-	uint32_t pps_sel = 1;
+
+	//PPS mode: pps_sel
+	//select_flag = 0 : internal logic generate PPS signal
+	//select_flag = 1 : GPS generate PPS signal
+	//select_flag = 2 : external trigger input PPS signal
+	uint32_t pps_sel = 1; //PPS selection config flag
+
+	//RX gain configuration value, range from 0~63, represent actual gain value 0~31.5
 	uint32_t rx1_gain_value = 12;
 	uint32_t rx2_gain_value = 16;
+
 	CMD cmd_start = { htons(0xAA55), htons(0x01), htons(CMD_START_SAMPLING), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, 0, htons(0x55AA) };
 	CMD cmd_stop = { htons(0xAA55), htons(0x01), htons(CMD_STOP_SAMPLING), 0, 0, 0, 0, 0, htons(0x55AA) };
 	CMD cmd_gps = { htons(0xAA55), htons(0x01), htons(CMD_READ_GPS), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, 0, htons(0x55AA) };
