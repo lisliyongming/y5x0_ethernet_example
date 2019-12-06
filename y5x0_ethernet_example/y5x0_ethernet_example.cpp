@@ -27,14 +27,9 @@
 #include <errno.h>
 #endif
 
-#define GPS_FIXED 0x00
-#define NO_GNSS_TIME  0x01
-#define NO_USABLE_SATELLITE	 0x08
-#define ONLY_ONE_USABLE_SAT	 0x09
-#define ONLY_TWO_USABLE_SAT	 0x0A
-#define ONLY_THREE_USABLE_SAT	 0x0B
-#define CHOSENED_SAT_UNUSABLE	 0x0C
-#define NBYTE_PER_FRAME (1024)
+//#define NBYTE_PER_FRAME (13*1024 * 1024)
+#define NBYTE_PER_FRAME (1*1024*1024)
+#define TESTING_PPS_TIMES 60
 #define CMD_START_SAMPLING 0x102
 #define CMD_STOP_SAMPLING  0x103
 #define CMD_READ_GPS       0x101
@@ -44,16 +39,24 @@
 #define CMD_RX2_GAIN_CONFIG       0x107
 
 #define TEST_GPS
-//#define TEST_DATA_SAMPLE
-//#define SAVING_DATA
-#define TEST_LOL_FREQ
-#define TEST_PPS_SEL
+#define TEST_DATA_SAMPLE
+#define SAVING_DATA
+//#define TEST_LOL_FREQ
+//#define TEST_PPS_SEL
 #define TEST_RX1_GAIN
-#define TEST_RX2_GAIN
+//#define TEST_RX2_GAIN
 
 #define MAX_TEST_CYCLE 1
 
+#define GPS_FIXED 0x00
+#define NO_GNSS_TIME  0x01
+#define NO_USABLE_SATELLITE	 0x08
+#define ONLY_ONE_USABLE_SAT	 0x09
+#define ONLY_TWO_USABLE_SAT	 0x0A
+#define ONLY_THREE_USABLE_SAT	 0x0B
+#define CHOSENED_SAT_UNUSABLE	 0x0C
 #pragma pack(2)
+
 typedef struct {
 	uint16_t head;
 	uint16_t dev_id;
@@ -247,12 +250,14 @@ int main(int argc, char** argv)
 	SOCKET sockfd;
 	uint32_t nwrite;
 	uint32_t nread;
-	uint8_t* buf;
-	FILE* fp;
-
-	if (argc < 3) {
+	uint8_t *buf;
+	FILE *fp;
+	FILE *fp_time;
+	uint32_t *pps_time;
+	int j = 0;
+	if(argc < 3) {
 		printf("Usage: %s <ipaddr> <port>\n"
-			"\t%s 192.168.0.145 5001", argv[0], argv[0]);
+			"\t%s 192.168.0.27 5001", argv[0], argv[0]);
 		exit(0);
 	}
 
@@ -268,7 +273,7 @@ int main(int argc, char** argv)
 	RF_FREQUENCY fre_config;
 
 	//FR local frequency config value, unit is Hz, range from 0~6000000000
-	uint64_t lol_freq_value = 5000000000;
+	uint64_t lol_freq_value = 2500000000;
 	fre_config.fre_high = (uint32_t)(lol_freq_value >> 32);
 	fre_config.fre_low = (uint32_t)lol_freq_value;
 
@@ -290,6 +295,15 @@ int main(int argc, char** argv)
 	CMD cmd_rx1gain = { htons(0xAA55), htons(0x01), htons(CMD_RX1_GAIN_CONFIG), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, htonl(rx1_gain_value), htons(0x55AA) };
 	CMD cmd_rx2gain = { htons(0xAA55), htons(0x01), htons(CMD_RX2_GAIN_CONFIG), htonl(NBYTE_PER_FRAME / sizeof(int)), 0, 0, 0, htonl(rx2_gain_value), htons(0x55AA) };
 
+
+	pps_time = (uint32_t*)malloc((sizeof(uint32_t))*TESTING_PPS_TIMES);
+	fp = fopen("rx_iq.dat", "wb+");
+	if(fp == NULL) {
+		printf("Can't open file [rx_iq.dat]\n");
+		exit(-1);
+	}
+#ifdef TEST_GPS
+	for(int i = 0; i < TESTING_PPS_TIMES; i++) {
 #ifdef TEST_LOL_FREQ
 	/** config local freq via tcp **/
 	nwrite = send(sockfd, (char*)& cmd_freq, sizeof(cmd_freq), 0);
@@ -308,7 +322,7 @@ int main(int argc, char** argv)
 	/** config rx1 gain via tcp **/
 	nwrite = send(sockfd, (char*)& cmd_rx1gain, sizeof(cmd_rx1gain), 0);
 	assert(nwrite >= 0);
-	Sleep(1000);
+	//Sleep(10);
 #endif
 
 #ifdef TEST_RX2_GAIN
@@ -317,10 +331,9 @@ int main(int argc, char** argv)
 	assert(nwrite >= 0);
 	Sleep(1000);
 #endif
-#ifdef TEST_GPS
-	for (int i = 0; i < 10000; i++) {
 		/** read gps information from tcp **/
-		nwrite = send(sockfd, (char*)& cmd_gps, sizeof(cmd_gps), 0);
+		printf("The testing num is %d\n", i);
+		nwrite = send(sockfd, (char *)&cmd_gps, sizeof(cmd_gps), 0);
 		assert(nwrite >= 0);
 
 		nread = recv(sockfd, (char*)& g_info, sizeof(GPS), 0);
@@ -389,18 +402,17 @@ int main(int argc, char** argv)
 #ifndef WIN32
 		sleep(1);
 #else
-		Sleep(1000);
+		//Sleep(10);
 #endif
-	}
 
 #endif
-	buf = (uint8_t*)malloc(NBYTE_PER_FRAME + sizeof(YUNSDR_META));
 
 #ifdef TEST_DATA_SAMPLE
+	buf = (uint8_t*)malloc(NBYTE_PER_FRAME + sizeof(YUNSDR_META));
 	nwrite = send(sockfd, (char*)& cmd_start, sizeof(cmd_start), 0);
 	assert(nwrite >= 0);
 
-	do {
+		//		do {
 		uint32_t sum = NBYTE_PER_FRAME + sizeof(YUNSDR_META);
 		uint8_t* ptr = buf;
 		uint32_t count = 0;
@@ -411,7 +423,9 @@ int main(int argc, char** argv)
 			count += nread;
 			ptr += nread;
 		} while (sum != count);
-		printf("[%d]read bytes:%d\n", i, count);
+		printf("[%d]read bytes:%d\n", j, count);
+		//			j++;
+		//		} while(j != MAX_TEST_CYCLE);
 #ifdef SAVING_DATA
 		if (fwrite(buf, count, 1, fp) < 0) {
 			printf("Can't write samples to rx_iq.dat\n");
@@ -419,31 +433,36 @@ int main(int argc, char** argv)
 			exit(-1);
 		}
 #endif
-		i++;
-	} while (i != MAX_TEST_CYCLE);
 
-	nwrite = send(sockfd, (char*)& cmd_stop, sizeof(cmd_stop), 0);
-	printf("Frame head is 0x%x\n", *((uint32_t*)buf + 256));
-	printf("Date length is 0x%x\n", *((uint32_t*)buf + 257));
-	printf("GPS time L is 0x%x\n", *((uint32_t*)buf + 258));
-	printf("GPS time H is 0x%x\n", *((uint32_t*)buf + 259));
+		int end_position = NBYTE_PER_FRAME/4;
+		printf("%x\n",*((uint32_t *)buf+end_position));
+		//		printf("%x\n",*((uint32_t *)buf+end_position+1));
+		printf("%x\n",*((uint32_t *)buf+end_position+2));
+		//		printf("%x\n",*((uint32_t *)buf+end_position+3));
+		//		nwrite = send(sockfd, (char *)&cmd_stop, sizeof(cmd_stop), 0);
+
+		assert(nwrite >= 0);
+		*(pps_time+i) = *((uint32_t *)buf+end_position+2);
+		free(buf);
 #endif
-	assert(nwrite >= 0);
+}
+	nwrite = send(sockfd, (char *)&cmd_stop, sizeof(cmd_stop), 0);
+
+	fp_time = fopen("rx_time.dat", "wb");
+	if(fp_time == NULL) {
+		printf("Can't open file [rx_time.dat]\n");
+		exit(-1);
+	}
+	if(fwrite(pps_time, (sizeof(uint32_t))*TESTING_PPS_TIMES, 1, fp_time) < 0) {
+		printf("Can't write samples to rx_time.dat\n");
+		fclose(fp_time);
+		exit(-1);
+	}
+	fclose(fp_time);
+	free(pps_time);
 	fclose(fp);
-	free(buf);
-	closesocket(sockfd);
 	printf("Test successful!\n");
+	closesocket(sockfd);
 
 	return EXIT_SUCCESS;
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
